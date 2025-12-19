@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>餐飲成本精算大師 SmartCost (旗艦V3.7版)</title>
+  <title>餐飲成本精算大師 SmartCost (旗艦V3.8版)</title>
   
   <!-- 全局錯誤攔截 -->
   <script>
@@ -96,6 +96,7 @@
     const Monitor = getIcon('Monitor', '💻');
     const Menu = getIcon('Menu', '☰'); 
     const X = getIcon('X', '✕'); 
+    const Droplets = getIcon('Droplets', '💧');
 
     // --- Constants ---
     const CATEGORIES = ['肉海鮮類', '蔬果類', '半成品類', '調味料類', '包材類', '組合材料'];
@@ -127,10 +128,10 @@
       // --- Data State ---
       const initialVendors = [{ id: 1, name: '好市多', contact: '客服', phone: '', note: '' }];
       const initialIngredients = [
-        { id: 1, name: '豬五花', price: 900, unit: 'g', amount: 3000, note: '進貨3kg $900', category: '肉海鮮類', vendorId: 1, yieldRate: 100 },
-        { id: 2, name: '蒜頭', price: 150, unit: 'g', amount: 600, note: '一斤約600g', category: '蔬果類', vendorId: '', yieldRate: 95 }, 
-        { id: 3, name: '紙碗', price: 200, unit: '個', amount: 50, note: '', category: '包材類', vendorId: '', yieldRate: 100 },
-        { id: 4, name: '洗選蛋', price: 8, unit: '顆', amount: 1, note: '單顆價', category: '肉海鮮類', vendorId: '', yieldRate: 100 },
+        { id: 1, name: '豬五花', price: 900, unit: 'g', amount: 3000, note: '3kg $900', category: '肉海鮮類', vendorId: 1, yieldRate: 100 },
+        { id: 2, name: '蒜頭', price: 150, unit: 'g', amount: 600, note: '600g $150', category: '蔬果類', vendorId: '', yieldRate: 95 }, 
+        { id: 3, name: '紙碗', price: 200, unit: '個', amount: 50, note: '50個 $200', category: '包材類', vendorId: '', yieldRate: 100 },
+        { id: 4, name: '洗選蛋', price: 8, unit: '顆', amount: 1, note: '1顆 $8', category: '肉海鮮類', vendorId: '', yieldRate: 100 },
       ];
       const initialRecipes = [
         { id: 1, name: '蒜泥白肉', sellingPrice: 200, items: [{ ingredientId: 1, usage: 250 }, { ingredientId: 2, usage: 10 }], deliveryRate: 32, deliveryPrice: 220 }
@@ -256,7 +257,7 @@
           `}>
             <div className="flex justify-between items-center mb-6">
               <h1 className="text-xl font-bold flex items-center gap-2 text-brand">
-                <Calculator /> 精算大師 <span className="text-xs bg-brand text-white px-1 rounded">V3.7</span>
+                <Calculator /> 精算大師 <span className="text-xs bg-brand text-white px-1 rounded">V3.8</span>
               </h1>
               {/* Mobile Close Button */}
               {mobileMode && (
@@ -392,7 +393,8 @@
             unit: form.calcUnit,
             vendorId: form.vendorId,
             yieldRate: parseFloat(form.yieldRate) || 100,
-            note: `進貨: ${form.inputAmount}${form.inputUnit} $${form.price}`
+            // [修正] 手動新增時移除 "進貨: " 前綴，直接顯示規格
+            note: `${form.inputAmount}${form.inputUnit} $${form.price}`
           };
 
           if (isEditing) setIngredients(prev => prev.map(i => i.id === isEditing ? item : i));
@@ -412,7 +414,6 @@
             const newItems = [];
             const skipped = [];
             
-            // [新增] 批次處理新廠商
             let tempVendors = [...vendors];
             const newVendorList = [];
 
@@ -427,30 +428,36 @@
               let category = cols[4] || '其他';
               if (!CATEGORIES.includes(category)) category = '其他';
               
-              // [新增] 處理廠商欄位 (第6欄)
               const vendorName = cols[5] ? cols[5].trim() : '';
               let vId = '';
               if (vendorName) {
-                // 先找現有的
                 let foundV = tempVendors.find(v => v.name === vendorName);
                 if (foundV) {
                   vId = foundV.id;
                 } else {
-                  // 沒找到，建立新的
                   const newV = { id: Date.now() + Math.random(), name: vendorName, contact: '', phone: '', note: '批次匯入自動建立' };
-                  tempVendors.push(newV); // 更新暫存
-                  newVendorList.push(newV); // 紀錄要更新到 state 的
+                  tempVendors.push(newV);
+                  newVendorList.push(newV);
                   vId = newV.id;
                 }
               }
 
-              // [新增] 處理收率 (第7欄)
               const yRate = cols[6] ? parseFloat(cols[6]) : 100;
-              const note = cols[7] || '';
+              // [修正] 若 CSV 備註欄位(col 7)為空，自動生成 "數量單位 $價格" 的格式
+              const rawNote = cols[7] ? cols[7].trim() : '';
+              const generatedNote = `${amount}${unit} $${price}`;
+              const note = rawNote || generatedNote;
+
+              // [修正] 匯入時也做單位換算，以確保資料庫一致性 (例如 kg -> g)
+              let finalAmount = amount;
+              let finalUnit = unit;
+              if (['kg', '公斤'].includes(unit.toLowerCase())) { finalAmount *= 1000; finalUnit = 'g'; }
+              else if (['台斤'].includes(unit)) { finalAmount *= 600; finalUnit = 'g'; }
+              else if (['l', '公升'].includes(unit.toLowerCase())) { finalAmount *= 1000; finalUnit = 'ml'; }
 
               if (name && !isNaN(price) && !isNaN(amount)) {
                 newItems.push({ 
-                  id: Date.now() + idx, name, price, amount, unit, category, note, 
+                  id: Date.now() + idx, name, price, amount: finalAmount, unit: finalUnit, category, note, 
                   yieldRate: isNaN(yRate) ? 100 : yRate, 
                   vendorId: vId 
                 });
@@ -474,7 +481,6 @@
         };
 
         const downloadIngTemplate = () => {
-          // [修正] 範本欄位增加廠商與收率
           const headers = ['名稱(必填)', '進貨總價', '進貨數量', '單位', '分類', '廠商名稱', '收率%', '備註'];
           const ex1 = ['範例牛肉', '1000', '1000', 'g', '肉海鮮類', '好市多', '100', '澳洲牛'];
           const ex2 = ['範例高麗菜', '50', '600', 'g', '蔬果類', '阿強蔬菜', '85', '去芯'];
@@ -575,6 +581,7 @@
                           </div>
                         </td>
                         <td className="p-3 text-sm text-slate-600">
+                          {/* [修正] 直接顯示 note 內容，並移除 "進貨: " 的取代邏輯 (因為新資料已經不存這個前綴了) */}
                           <div className="font-medium">{ing.note ? ing.note.replace('進貨: ', '') : '-'}</div>
                           {ing.yieldRate < 100 && <div className="text-xs text-slate-400 mt-1">收率: {ing.yieldRate}%</div>}
                         </td>
@@ -620,7 +627,6 @@
             const missingIngs = new Set();
             lines.forEach((line) => {
               const cols = parseLine(line);
-              // [修正] 欄位順序：產品名稱(0), 原料(1), 使用量(2)
               if (cols.length < 3) return;
               const rName = cols[0].trim();
               const ingName = cols[1].trim();
@@ -631,7 +637,6 @@
               const foundIng = ingredients.find(i => i.name === ingName);
               if (!foundIng) { missingIngs.add(ingName); return; }
               
-              // [修正] 預設售價設為 0
               if (!recipeMap[rName]) {
                 recipeMap[rName] = { id: Date.now() + Math.random(), name: rName, sellingPrice: 0, deliveryRate: 32, deliveryPrice: 0, items: [] };
               }
@@ -648,8 +653,7 @@
         };
 
         const downloadRecipeTemplate = () => {
-          // [修正] 範本移除售價欄位
-          const headers = ['產品名稱(必填)', '原物料名稱(系統內)', '使用量(必填)'];
+          const headers = ['產品名稱(必填)', '原物料名稱(系統內)', '使用量'];
           const ex1 = ['範例拿鐵', '紐西蘭牛奶', '0.2'];
           const ex2 = ['範例拿鐵', '紙杯(12oz)', '1'];
           const content = '\uFEFF' + [headers, ex1, ex2].map(e => e.join(',')).join('\n');
