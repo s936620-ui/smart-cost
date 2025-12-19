@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>餐飲成本精算大師 SmartCost (旗艦V3.6版)</title>
+  <title>餐飲成本精算大師 SmartCost (旗艦V3.7版)</title>
   
   <!-- 全局錯誤攔截 -->
   <script>
@@ -94,8 +94,8 @@
     const Unlock = getIcon('Unlock', '🔓');
     const Smartphone = getIcon('Smartphone', '📱');
     const Monitor = getIcon('Monitor', '💻');
-    const Menu = getIcon('Menu', '☰'); // [新增] 選單圖示
-    const X = getIcon('X', '✕'); // [新增] 關閉圖示
+    const Menu = getIcon('Menu', '☰'); 
+    const X = getIcon('X', '✕'); 
 
     // --- Constants ---
     const CATEGORIES = ['肉海鮮類', '蔬果類', '半成品類', '調味料類', '包材類', '組合材料'];
@@ -108,9 +108,21 @@
     const SmartCostApp = () => {
       const [activeTab, setActiveTab] = useState('dashboard');
       const [mobileMode, setMobileMode] = useState(false);
-      const [isSidebarOpen, setIsSidebarOpen] = useState(false); // [新增] 側邊欄開關
+      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
       
       const md = (classes) => mobileMode ? '' : classes;
+
+      // 自動偵測螢幕寬度
+      useEffect(() => {
+        const checkMobile = () => {
+          if (window.innerWidth < 768) {
+            setMobileMode(true);
+          }
+        };
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+      }, []);
 
       // --- Data State ---
       const initialVendors = [{ id: 1, name: '好市多', contact: '客服', phone: '', note: '' }];
@@ -139,7 +151,7 @@
       useEffect(() => localStorage.setItem('sc_v33_sets', JSON.stringify(sets)), [sets]);
       useEffect(() => localStorage.setItem('sc_v33_margin', targetMargin), [targetMargin]);
 
-      // --- Calculations (Keep existing logic) ---
+      // --- Calculations ---
       const getUnitCost = (ing) => {
         if (!ing) return 0;
         if (ing.sourceRecipeId) {
@@ -227,7 +239,7 @@
         </span>
       );
 
-      // --- Sidebar Component (Handles both Desktop & Mobile Drawer) ---
+      // --- Sidebar Component ---
       const Sidebar = () => (
         <>
           {/* Mobile Overlay (Backdrop) */}
@@ -244,7 +256,7 @@
           `}>
             <div className="flex justify-between items-center mb-6">
               <h1 className="text-xl font-bold flex items-center gap-2 text-brand">
-                <Calculator /> 精算大師 <span className="text-xs bg-brand text-white px-1 rounded">V3.6</span>
+                <Calculator /> 精算大師 <span className="text-xs bg-brand text-white px-1 rounded">V3.7</span>
               </h1>
               {/* Mobile Close Button */}
               {mobileMode && (
@@ -309,7 +321,7 @@
         </>
       );
 
-      const VendorsView = () => { /* ...廠商頁面... */ 
+      const VendorsView = () => {  
         const [isEditing, setIsEditing] = useState(null);
         const [form, setForm] = useState({ name: '', contact: '', phone: '', note: '' });
         const save = () => {
@@ -399,6 +411,11 @@
             if (error) return alert(error);
             const newItems = [];
             const skipped = [];
+            
+            // [新增] 批次處理新廠商
+            let tempVendors = [...vendors];
+            const newVendorList = [];
+
             lines.forEach((line, idx) => {
               const cols = parseLine(line);
               if (cols.length < 4) return;
@@ -408,24 +425,60 @@
               const amount = parseFloat(cols[2].replace(/,/g, ''));
               const unit = cols[3];
               let category = cols[4] || '其他';
-              const note = cols[5] || '';
               if (!CATEGORIES.includes(category)) category = '其他';
+              
+              // [新增] 處理廠商欄位 (第6欄)
+              const vendorName = cols[5] ? cols[5].trim() : '';
+              let vId = '';
+              if (vendorName) {
+                // 先找現有的
+                let foundV = tempVendors.find(v => v.name === vendorName);
+                if (foundV) {
+                  vId = foundV.id;
+                } else {
+                  // 沒找到，建立新的
+                  const newV = { id: Date.now() + Math.random(), name: vendorName, contact: '', phone: '', note: '批次匯入自動建立' };
+                  tempVendors.push(newV); // 更新暫存
+                  newVendorList.push(newV); // 紀錄要更新到 state 的
+                  vId = newV.id;
+                }
+              }
+
+              // [新增] 處理收率 (第7欄)
+              const yRate = cols[6] ? parseFloat(cols[6]) : 100;
+              const note = cols[7] || '';
+
               if (name && !isNaN(price) && !isNaN(amount)) {
-                newItems.push({ id: Date.now() + idx, name, price, amount, unit, category, note, yieldRate: 100, vendorId: '' });
+                newItems.push({ 
+                  id: Date.now() + idx, name, price, amount, unit, category, note, 
+                  yieldRate: isNaN(yRate) ? 100 : yRate, 
+                  vendorId: vId 
+                });
               }
             });
+            
             let msg = `成功匯入 ${newItems.length} 筆原料。`;
+            if (newVendorList.length > 0) msg += `\n自動建立了 ${newVendorList.length} 家新廠商。`;
             if (skipped.length > 0) msg += `\n\n已略過 ${skipped.length} 筆重複資料：\n${skipped.slice(0,5).join(', ')}...`;
-            if (newItems.length > 0) { setIngredients(prev => [...prev, ...newItems]); alert(msg); } else if (skipped.length > 0) { alert(msg); }
+            
+            if (newItems.length > 0) {
+              if (newVendorList.length > 0) setVendors(prev => [...prev, ...newVendorList]);
+              setIngredients(prev => [...prev, ...newItems]);
+              alert(msg);
+            } else if (skipped.length > 0) {
+              alert(msg);
+            }
             e.target.value = '';
           };
           reader.readAsText(file);
         };
 
         const downloadIngTemplate = () => {
-          const headers = ['名稱(必填)', '進貨總價', '進貨數量', '單位', '分類', '備註'];
-          const ex1 = ['範例牛肉', '1000', '1000', 'g', '肉海鮮類', '澳洲牛'];
-          const content = '\uFEFF' + [headers, ex1].map(e => e.join(',')).join('\n');
+          // [修正] 範本欄位增加廠商與收率
+          const headers = ['名稱(必填)', '進貨總價', '進貨數量', '單位', '分類', '廠商名稱', '收率%', '備註'];
+          const ex1 = ['範例牛肉', '1000', '1000', 'g', '肉海鮮類', '好市多', '100', '澳洲牛'];
+          const ex2 = ['範例高麗菜', '50', '600', 'g', '蔬果類', '阿強蔬菜', '85', '去芯'];
+          const content = '\uFEFF' + [headers, ex1, ex2].map(e => e.join(',')).join('\n');
           downloadFile(content, '原物料匯入範本.csv');
         };
 
@@ -433,11 +486,11 @@
 
         return (
           <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
+            <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-800">原料管理</h2>
-              <div className="flex gap-2 w-full md:w-auto">
-                <button onClick={downloadIngTemplate} className="flex-1 md:flex-none text-xs border border-slate-300 text-slate-600 bg-white px-3 py-1 rounded hover:bg-slate-50 flex items-center justify-center gap-1"><Download size={12}/> 下載匯入範本</button>
-                <label className="flex-1 md:flex-none text-xs bg-brand text-white px-3 py-1 rounded hover:bg-brand-dark flex items-center justify-center gap-1 cursor-pointer">
+              <div className="flex gap-2">
+                <button onClick={downloadIngTemplate} className="text-xs border border-slate-300 text-slate-600 bg-white px-3 py-1 rounded hover:bg-slate-50 flex items-center justify-center gap-1"><Download size={12}/> 下載匯入範本</button>
+                <label className="text-xs bg-brand text-white px-3 py-1 rounded hover:bg-brand-dark flex items-center justify-center gap-1 cursor-pointer">
                   <Upload size={12}/> 匯入 CSV
                   <input type="file" className="hidden" accept=".csv" onChange={handleIngImport} />
                 </label>
@@ -567,20 +620,27 @@
             const missingIngs = new Set();
             lines.forEach((line) => {
               const cols = parseLine(line);
-              if (cols.length < 4) return;
+              // [修正] 欄位順序：產品名稱(0), 原料(1), 使用量(2)
+              if (cols.length < 3) return;
               const rName = cols[0].trim();
-              const rPrice = parseFloat(cols[1].replace(/,/g, '')) || 0;
-              const ingName = cols[2].trim();
-              const usage = parseFloat(cols[3].replace(/,/g, '')) || 0;
+              const ingName = cols[1].trim();
+              const usage = parseFloat(cols[2].replace(/,/g, '')) || 0;
+              
+              if (!rName || !ingName) return;
+
               const foundIng = ingredients.find(i => i.name === ingName);
               if (!foundIng) { missingIngs.add(ingName); return; }
-              if (!recipeMap[rName]) recipeMap[rName] = { id: Date.now() + Math.random(), name: rName, sellingPrice: rPrice, items: [] };
+              
+              // [修正] 預設售價設為 0
+              if (!recipeMap[rName]) {
+                recipeMap[rName] = { id: Date.now() + Math.random(), name: rName, sellingPrice: 0, deliveryRate: 32, deliveryPrice: 0, items: [] };
+              }
               recipeMap[rName].items.push({ ingredientId: foundIng.id, usage: usage });
             });
             const newRecipes = Object.values(recipeMap);
             if (newRecipes.length > 0) {
               setRecipes(prev => [...prev, ...newRecipes]);
-              alert(`匯入 ${newRecipes.length} 個配方！\n${missingIngs.size>0 ? `(略過未知原料: ${Array.from(missingIngs).join(',')})` : ''}`);
+              alert(`匯入 ${newRecipes.length} 個配方！\n(請記得設定產品售價)\n${missingIngs.size>0 ? `(略過未知原料: ${Array.from(missingIngs).join(',')})` : ''}`);
             }
             e.target.value = '';
           };
@@ -588,9 +648,11 @@
         };
 
         const downloadRecipeTemplate = () => {
-          const headers = ['產品名稱(必填)', '產品售價', '原物料名稱(系統內)', '使用量'];
-          const ex1 = ['範例拿鐵', '120', '紐西蘭牛奶', '0.2'];
-          const content = '\uFEFF' + [headers, ex1].map(e => e.join(',')).join('\n');
+          // [修正] 範本移除售價欄位
+          const headers = ['產品名稱(必填)', '原物料名稱(系統內)', '使用量(必填)'];
+          const ex1 = ['範例拿鐵', '紐西蘭牛奶', '0.2'];
+          const ex2 = ['範例拿鐵', '紙杯(12oz)', '1'];
+          const content = '\uFEFF' + [headers, ex1, ex2].map(e => e.join(',')).join('\n');
           downloadFile(content, '食譜匯入範本.csv');
         };
 
@@ -734,7 +796,7 @@
                   <div><div className="text-slate-400">總規格</div><div className="text-lg text-blue-300 font-bold">{displayWeight}</div></div>
                   <div><div className="text-slate-400">毛利</div><div className="text-xl text-emerald-400 font-bold">${profit.toFixed(1)}</div></div>
                 </div>
-                {/* [解鎖編輯按鈕] */}
+                {/* 狀態切換按鈕 */}
                 {isReadOnly ? (
                   <button onClick={() => setIsReadOnly(false)} className="bg-slate-600 hover:bg-slate-500 px-6 py-2 rounded font-bold flex items-center gap-2"><Edit3 size={16}/> 解鎖編輯</button>
                 ) : (
@@ -754,11 +816,18 @@
           <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <h2 className="text-2xl font-bold text-slate-800">單品/配方列表 ({recipes.length})</h2>
+              
               <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
                 <div className="relative">
-                  <input className="pl-8 pr-4 py-2 border rounded-lg focus:ring-2 ring-brand outline-none w-full" placeholder="搜尋產品..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                  <input 
+                    className="pl-8 pr-4 py-2 border rounded-lg focus:ring-2 ring-brand outline-none w-full" 
+                    placeholder="搜尋產品..." 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                  />
                   <span className="absolute left-2.5 top-2.5 text-slate-400"><Search size={16}/></span>
                 </div>
+                
                 <div className="flex gap-1 shrink-0">
                    <button onClick={downloadRecipeTemplate} className="p-2 border rounded hover:bg-slate-50 text-slate-500 bg-white" title="下載匯入範本"><Download size={18}/></button>
                    <label className="p-2 border rounded hover:bg-slate-50 text-slate-500 bg-white cursor-pointer" title="匯入配方CSV">
@@ -766,6 +835,7 @@
                      <input type="file" className="hidden" accept=".csv" onChange={handleRecipeImport} />
                    </label>
                 </div>
+
                 <div className="flex bg-white rounded-lg border overflow-hidden shrink-0">
                   <button onClick={() => setLayout('grid')} className={`p-2 ${layout==='grid'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`} title="卡片檢視"><LayoutGrid size={18}/></button>
                   <button onClick={() => setLayout('list')} className={`p-2 ${layout==='list'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`} title="清單檢視"><List size={18}/></button>
@@ -847,7 +917,6 @@
         );
       };
 
-      // --- Sets & Dashboard View (Same as V3.5) ---
       const SetsView = () => {
         const [isEditing, setIsEditing] = useState(false);
         const [form, setForm] = useState({ name: '', sellingPrice: '', items: [] });
@@ -925,6 +994,7 @@
                     <div className="flex items-center gap-8">
                        <div className="text-right"><div className="text-xs text-slate-400">售價</div><div className="font-bold">${s.sellingPrice}</div></div>
                        <div className="text-right"><div className="text-xs text-slate-400">成本</div><div className="text-red-500 font-bold">${c.toFixed(1)}</div></div>
+                       {/* Added Profit Amount */}
                        <div className="text-right"><div className="text-xs text-slate-400">毛利額</div><div className="font-bold text-emerald-600">${(s.sellingPrice - c).toFixed(1)}</div></div>
                        <div className="text-right"><div className="text-xs text-slate-400">毛利率</div><div className="font-bold"><MarginBadge val={m} /></div></div>
                        <div className="flex gap-1">
