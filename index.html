@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>餐飲成本精算大師 SmartCost (旗艦V3.9版)</title>
+  <title>餐飲成本精算大師 SmartCost (旗艦V4.3.1版)</title>
   
-  <!-- 全局錯誤攔截 -->
   <script>
     window.onerror = function(msg, url, line, col, error) {
       const errorBox = document.getElementById('error-box');
@@ -17,7 +16,6 @@
     };
   </script>
 
-  <!-- 載入 React 核心 -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script>window.react = window.React;</script>
@@ -37,7 +35,6 @@
     .sortable-header { cursor: pointer; user-select: none; transition: background 0.2s; }
     .sortable-header:hover { background-color: #f1f5f9; }
 
-    /* 主色調 - 深橙色 */
     .bg-brand { background-color: #ff8c00; }
     .bg-brand:hover { background-color: #e07b00; }
     .text-brand { color: #ff8c00; }
@@ -47,25 +44,24 @@
     
     .input-disabled { background-color: #f3f4f6; color: #6b7280; cursor: not-allowed; }
     
-    /* 可編輯單元格樣式 */
     .editable-cell-wrapper {
         border-bottom: 1px dashed transparent;
         transition: all 0.2s;
+        cursor: pointer;
     }
     .editable-mode .editable-cell-wrapper:hover::after {
         content: '✎';
         position: absolute;
-        right: 4px;
+        right: 2px;
         top: 50%;
         transform: translateY(-50%);
         font-size: 10px;
         color: #cbd5e1;
     }
     .editable-mode .editable-cell-wrapper:hover {
-        background-color: #fffbeb; /* amber-50 */
+        background-color: #fffbeb;
         border-radius: 4px;
         box-shadow: 0 0 0 1px #fcd34d;
-        cursor: text;
         border-bottom-color: #fcd34d;
     }
   </style>
@@ -83,7 +79,6 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef, useCallback } = React;
     
-    // --- Icons ---
     const Icons = window.lucideReact || {};
     const getIcon = (name, fallbackEmoji) => {
       const IconComp = Icons[name];
@@ -120,10 +115,8 @@
     const X = getIcon('X', '✕'); 
     const Droplets = getIcon('Droplets', '💧');
     const BarChart3 = getIcon('BarChart3', '📊');
-    const PieChart = getIcon('PieChart', '🥧');
     const PenLine = getIcon('PenLine', '🖊️');
 
-    // --- Constants & Global Helpers ---
     const CATEGORIES = ['肉海鮮類', '蔬果類', '半成品類', '調味料類', '包材類', '組合材料'];
 
     const isWeightUnit = (unit) => {
@@ -158,8 +151,7 @@
         a.download = filename;
         a.click();
     };
-    
-    // --- 通用可編輯單元格組件 ---
+
     const EditableCell = ({ value, type = 'text', options = [], onSave, className = '', suffix = '', editable = true }) => {
         const [editing, setEditing] = useState(false);
         const [temp, setTemp] = useState(value);
@@ -192,7 +184,7 @@
                         value={temp} 
                         onChange={e => setTemp(e.target.value)} 
                         onBlur={commit} 
-                        className="w-full p-1 border border-brand outline-none rounded text-sm bg-white shadow-lg min-w-[60px]"
+                        className="w-full p-1 border border-brand outline-none rounded text-sm bg-white shadow-lg min-w-[60px] z-50 relative"
                     >
                         {options.map(opt => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -208,7 +200,7 @@
                     onChange={e => setTemp(e.target.value)}
                     onBlur={commit}
                     onKeyDown={e => e.key === 'Enter' && commit()}
-                    className="w-full p-1 border border-brand outline-none rounded text-sm shadow-inner min-w-[60px]"
+                    className="w-full p-1 border border-brand outline-none rounded text-sm shadow-inner min-w-[60px] z-50 relative"
                     step={type === 'number' ? 'any' : undefined}
                 />
             );
@@ -216,8 +208,8 @@
 
         return (
             <div 
-                onClick={() => setEditing(true)} 
-                className={`editable-cell-wrapper relative px-1 py-0.5 transition-all cursor-pointer ${className}`}
+                onClick={(e) => { e.stopPropagation(); setEditing(true); }} 
+                className={`editable-cell-wrapper relative px-1 py-0.5 transition-all ${className}`}
                 title="點擊編輯"
             >
                 {type === 'select' 
@@ -228,10 +220,111 @@
         );
     };
 
-    // --- IngredientsView (Extracted for Stability) ---
+    const MarginBadge = ({ val, targetMargin }) => (
+        <span className={`font-bold ${val < targetMargin ? 'text-red-500' : 'text-emerald-500'}`}>
+          {val.toFixed(1)}%
+        </span>
+    );
+
+    // --- Sub-Components ---
+
+    const Sidebar = ({ activeTab, setActiveTab, mobileMode, setMobileMode, isSidebarOpen, setIsSidebarOpen, onBackup, onRestore }) => (
+        <>
+          {mobileMode && isSidebarOpen && (
+            <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setIsSidebarOpen(false)} />
+          )}
+
+          <div className={`
+            bg-slate-900 text-slate-100 p-4 flex flex-col gap-2 shadow-xl z-50 overflow-y-auto shrink-0 transition-all duration-300
+            ${mobileMode 
+              ? `fixed inset-y-0 left-0 w-64 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}` 
+              : 'w-full md:w-64 relative translate-x-0'
+            }
+          `}>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-xl font-bold flex items-center gap-2 text-brand">
+                <Calculator /> 精算大師 <span className="text-xs bg-brand text-white px-1 rounded">V4.3</span>
+              </h1>
+              {mobileMode && (
+                <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-white">
+                  <X size={24}/>
+                </button>
+              )}
+            </div>
+
+            {[
+              { id: 'dashboard', icon: TrendingUp, label: '總覽分析' },
+              { id: 'vendors', icon: Users, label: '廠商管理' },
+              { id: 'ingredients', icon: Package, label: '原料管理' },
+              { id: 'recipes', icon: Utensils, label: '單品/配方' },
+              { id: 'sets', icon: Layers, label: '套餐管理' },
+              { id: 'projection', icon: BarChart3, label: '營收預估' }
+            ].map(tab => (
+              <button key={tab.id} onClick={() => { setActiveTab(tab.id); if(mobileMode) setIsSidebarOpen(false); }} 
+                className={`p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === tab.id ? 'bg-brand text-white shadow-lg' : 'hover:bg-slate-800 text-slate-300'}`}>
+                <tab.icon size={20} /> {tab.label}
+              </button>
+            ))}
+            
+            <div className="mt-auto pt-4 border-t border-slate-700 space-y-2">
+              <button onClick={() => { setMobileMode(!mobileMode); setIsSidebarOpen(false); }} 
+                className={`w-full p-2 rounded text-xs flex items-center justify-center gap-2 font-bold transition-colors ${mobileMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                {mobileMode ? <><Monitor size={14}/> 切換回電腦版</> : <><Smartphone size={14}/> 切換手機排版</>}
+              </button>
+
+              <div className="text-xs text-slate-400 font-bold mb-1 mt-2">全系統備份 (JSON)</div>
+              <button onClick={onBackup} className="w-full p-2 bg-slate-800 hover:bg-slate-700 rounded text-xs flex items-center justify-center gap-2 border border-slate-600">
+                 <Download size={14} /> 備份資料庫
+              </button>
+              <label className="w-full p-2 bg-slate-800 hover:bg-slate-700 rounded text-xs flex items-center justify-center gap-2 cursor-pointer border border-slate-600">
+                 <Upload size={14} /> 還原資料庫
+                 <input type="file" className="hidden" accept=".json" onChange={onRestore} />
+              </label>
+            </div>
+          </div>
+        </>
+    );
+
+    const VendorsView = ({ vendors, setVendors, mobileMode }) => {  
+        const [isEditing, setIsEditing] = useState(null);
+        const [form, setForm] = useState({ name: '', contact: '', phone: '', note: '' });
+        const md = (classes) => mobileMode ? '' : classes;
+        const save = () => {
+          if(!form.name) return alert('請輸入廠商名稱');
+          const item = { id: isEditing || Date.now(), ...form };
+          if(isEditing) setVendors(prev => prev.map(v => v.id === isEditing ? item : v));
+          else setVendors(prev => [...prev, item]);
+          setIsEditing(null); setForm({ name: '', contact: '', phone: '', note: '' });
+        };
+        return (
+          <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">廠商管理</h2>
+            <div className="bg-white p-6 rounded-xl shadow-sm border mb-8">
+              <h3 className="font-bold text-slate-700 mb-4">{isEditing ? '編輯廠商' : '新增廠商'}</h3>
+              <div className={`grid grid-cols-1 ${md('md:grid-cols-4')} gap-4`}>
+                <div><label className="text-xs text-slate-500">廠商名稱</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="例如: 好市多" /></div>
+                <div><label className="text-xs text-slate-500">聯絡人</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} /></div>
+                <div><label className="text-xs text-slate-500">電話</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+                <div><label className="text-xs text-slate-500">備註</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.note} onChange={e => setForm({...form, note: e.target.value})} /></div>
+                <div className={`${md('md:col-span-4')} flex gap-2`}>
+                  <button onClick={save} className="bg-brand text-white px-6 py-2 rounded font-bold">{isEditing ? '更新' : '新增'}</button>
+                  {isEditing && <button onClick={() => {setIsEditing(null); setForm({ name: '', contact: '', phone: '', note: '' });}} className="bg-gray-400 text-white px-4 rounded">取消</button>}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl shadow overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 border-b"><tr><th className="p-4">名稱</th><th className="p-4">聯絡資訊</th><th className="p-4">備註</th><th className="p-4 text-right">操作</th></tr></thead>
+                <tbody>{vendors.map(v => (<tr key={v.id} className="border-b hover:bg-slate-50"><td className="p-4 font-bold">{v.name}</td><td className="p-4 text-sm"><div>{v.contact}</div><div className="text-slate-400">{v.phone}</div></td><td className="p-4 text-sm text-slate-500">{v.note}</td><td className="p-4 text-right"><button onClick={() => {setIsEditing(v.id); setForm(v);}} className="text-slate-400 hover:text-brand mr-2"><Edit3 size={16}/></button><button onClick={() => confirm('確認刪除?') && setVendors(p => p.filter(x=>x.id!==v.id))} className="text-slate-400 hover:text-red-600"><Trash2 size={16}/></button></td></tr>))}</tbody>
+              </table>
+            </div>
+          </div>
+        );
+    };
+
     const IngredientsView = ({ ingredients, setIngredients, vendors, setVendors, getUnitCost }) => {
         const [isEditing, setIsEditing] = useState(null);
-        const [quickEditMode, setQuickEditMode] = useState(false); // 新增：快速編輯模式開關
+        const [quickEditMode, setQuickEditMode] = useState(false);
         const [form, setForm] = useState({ 
           name: '', category: '肉海鮮類', price: '', 
           inputAmount: '', inputUnit: 'kg', calcUnit: 'g',
@@ -248,7 +341,6 @@
           else setForm(f => ({...f, calcUnit: form.inputUnit}));
         }, [form.inputUnit]);
 
-        // 連動更新邏輯
         const updateIngredient = (id, updates) => {
             setIngredients(prev => prev.map(ing => {
                 if (ing.id !== id) return ing;
@@ -270,31 +362,20 @@
 
         const handleSave = () => {
           if (!form.name || !form.price || !form.inputAmount) return alert('請填寫完整');
-          const isDuplicate = ingredients.some(i => i.name === form.name && i.id !== isEditing);
-          if (isDuplicate) return alert('已有相同名稱的原料，請勿重複建立！');
-
           let finalAmount = parseFloat(form.inputAmount);
           if (form.inputUnit === 'kg') finalAmount *= 1000;
           if (form.inputUnit === '台斤') finalAmount *= 600;
           if (form.inputUnit === 'L') finalAmount *= 1000;
-
           const item = {
             id: isEditing || Date.now(),
-            name: form.name,
-            category: form.category,
-            price: parseFloat(form.price),
-            amount: finalAmount,
-            unit: form.calcUnit,
-            inputAmount: parseFloat(form.inputAmount),
-            inputUnit: form.inputUnit,
-            vendorId: form.vendorId,
-            yieldRate: parseFloat(form.yieldRate) || 100,
+            name: form.name, category: form.category, price: parseFloat(form.price),
+            amount: finalAmount, unit: form.calcUnit,
+            inputAmount: parseFloat(form.inputAmount), inputUnit: form.inputUnit,
+            vendorId: form.vendorId, yieldRate: parseFloat(form.yieldRate) || 100,
             note: `${form.inputAmount}${form.inputUnit} $${form.price}`
           };
-
           if (isEditing) setIngredients(prev => prev.map(i => i.id === isEditing ? item : i));
           else setIngredients(prev => [...prev, item]);
-          
           setIsEditing(null);
           setForm({ name: '', category: '肉海鮮類', price: '', inputAmount: '', inputUnit: 'kg', calcUnit: 'g', vendorId: '', yieldRate: 100 });
         };
@@ -307,8 +388,6 @@
             const { lines, parseLine, error } = parseCSV(ev.target.result);
             if (error) return alert(error);
             const newItems = [];
-            let tempVendors = [...vendors];
-            const newVendorList = [];
             lines.forEach((line, idx) => {
               const cols = parseLine(line);
               if (cols.length < 4) return;
@@ -319,16 +398,6 @@
               const unit = cols[3];
               let category = cols[4] || '其他';
               if (!CATEGORIES.includes(category)) category = '其他';
-              const vendorName = cols[5] ? cols[5].trim() : '';
-              let vId = '';
-              if (vendorName) {
-                let foundV = tempVendors.find(v => v.name === vendorName);
-                if (foundV) { vId = foundV.id; } 
-                else {
-                  const newV = { id: Date.now() + Math.random(), name: vendorName, contact: '', phone: '', note: '批次匯入自動建立' };
-                  tempVendors.push(newV); newVendorList.push(newV); vId = newV.id;
-                }
-              }
               let finalAmount = amount;
               let finalUnit = unit;
               if (['kg', '公斤'].includes(unit.toLowerCase())) { finalAmount *= 1000; finalUnit = 'g'; }
@@ -337,11 +406,10 @@
               newItems.push({ 
                 id: Date.now() + idx, name, price, amount: finalAmount, unit: finalUnit, 
                 inputAmount: amount, inputUnit: unit, category, note: `${amount}${unit} $${price}`, 
-                yieldRate: 100, vendorId: vId 
+                yieldRate: 100, vendorId: '' 
               });
             });
             if (newItems.length > 0) {
-              if (newVendorList.length > 0) setVendors(prev => [...prev, ...newVendorList]);
               setIngredients(prev => [...prev, ...newItems]);
               alert(`匯入 ${newItems.length} 筆資料`);
             }
@@ -454,237 +522,7 @@
         );
     };
 
-    const SmartCostApp = () => {
-      const [activeTab, setActiveTab] = useState('dashboard');
-      const [mobileMode, setMobileMode] = useState(false);
-      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-      
-      const md = (classes) => mobileMode ? '' : classes;
-
-      // 自動偵測螢幕寬度
-      useEffect(() => {
-        const checkMobile = () => {
-          if (window.innerWidth < 768) {
-            setMobileMode(true);
-          }
-        };
-        checkMobile();
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-      }, []);
-
-      // --- Data State ---
-      const initialVendors = [{ id: 1, name: '好市多', contact: '客服', phone: '', note: '' }];
-      const initialIngredients = [
-        { id: 1, name: '豬五花', price: 900, unit: 'g', amount: 3000, inputAmount: 3, inputUnit: 'kg', note: '3kg $900', category: '肉海鮮類', vendorId: 1, yieldRate: 100 },
-        { id: 2, name: '蒜頭', price: 150, unit: 'g', amount: 600, inputAmount: 600, inputUnit: 'g', note: '600g $150', category: '蔬果類', vendorId: '', yieldRate: 95 }, 
-        { id: 3, name: '紙碗', price: 200, unit: '個', amount: 50, inputAmount: 50, inputUnit: '個', note: '50個 $200', category: '包材類', vendorId: '', yieldRate: 100 },
-        { id: 4, name: '洗選蛋', price: 8, unit: '顆', amount: 1, inputAmount: 1, inputUnit: '顆', note: '1顆 $8', category: '肉海鮮類', vendorId: '', yieldRate: 100 },
-      ];
-      const initialRecipes = [
-        { id: 1, name: '蒜泥白肉', sellingPrice: 200, items: [{ ingredientId: 1, usage: 250 }, { ingredientId: 2, usage: 10 }], deliveryRate: 32, deliveryPrice: 220 }
-      ];
-
-      const [vendors, setVendors] = useState(() => JSON.parse(localStorage.getItem('sc_v39_vendors')) || initialVendors);
-      const [ingredients, setIngredients] = useState(() => {
-        const d = JSON.parse(localStorage.getItem('sc_v39_ing')) || initialIngredients;
-        return d.map(i => ({
-            ...i, 
-            sourceRecipeId: i.sourceRecipeId || null,
-            inputAmount: i.inputAmount || (i.unit === 'g' ? i.amount / 1000 : i.amount), 
-            inputUnit: i.inputUnit || (i.unit === 'g' ? 'kg' : i.unit) 
-        })); 
-      });
-      const [recipes, setRecipes] = useState(() => JSON.parse(localStorage.getItem('sc_v39_rec')) || initialRecipes);
-      const [sets, setSets] = useState(() => JSON.parse(localStorage.getItem('sc_v39_sets')) || []);
-      const [targetMargin, setTargetMargin] = useState(() => Number(localStorage.getItem('sc_v39_margin')) || 50);
-      const [salesData, setSalesData] = useState(() => JSON.parse(localStorage.getItem('sc_v39_sales')) || {});
-
-      useEffect(() => localStorage.setItem('sc_v39_vendors', JSON.stringify(vendors)), [vendors]);
-      useEffect(() => localStorage.setItem('sc_v39_ing', JSON.stringify(ingredients)), [ingredients]);
-      useEffect(() => localStorage.setItem('sc_v39_rec', JSON.stringify(recipes)), [recipes]);
-      useEffect(() => localStorage.setItem('sc_v39_sets', JSON.stringify(sets)), [sets]);
-      useEffect(() => localStorage.setItem('sc_v39_margin', targetMargin), [targetMargin]);
-      useEffect(() => localStorage.setItem('sc_v39_sales', JSON.stringify(salesData)), [salesData]);
-
-      // --- Calculations ---
-      const calculateRecipeCostRecursive = (items) => {
-        return items.reduce((total, item) => {
-          const ing = ingredients.find(i => i.id === Number(item.ingredientId));
-          return total + (ing ? getUnitCost(ing) : 0) * item.usage;
-        }, 0);
-      };
-
-      const getUnitCost = (ing) => {
-        if (!ing) return 0;
-        if (ing.sourceRecipeId) {
-          const sourceRecipe = recipes.find(r => r.id === ing.sourceRecipeId);
-          if (sourceRecipe) {
-            const recipeTotalCost = calculateRecipeCostRecursive(sourceRecipe.items);
-            return ing.amount > 0 ? recipeTotalCost / ing.amount : 0;
-          }
-        }
-        if (!ing.amount) return 0;
-        const baseCost = ing.price / ing.amount;
-        const yieldRate = (ing.yieldRate || 100) / 100;
-        return yieldRate > 0 ? baseCost / yieldRate : baseCost;
-      };
-
-      const calcRecipeCost = (items) => calculateRecipeCostRecursive(items);
-
-      const calcRecipeDisplay = (items) => {
-        let totalWeight = 0;
-        let otherCounts = [];
-        items.forEach(item => {
-          const ing = ingredients.find(i => i.id === Number(item.ingredientId));
-          if (!ing || ing.category === '包材類') return; 
-          if (isWeightUnit(ing.unit)) {
-            totalWeight += parseFloat(item.usage) || 0;
-          } else {
-            otherCounts.push(`${item.usage}${ing.unit}`);
-          }
-        });
-        let output = totalWeight > 0 ? `${totalWeight.toFixed(1)}g` : '';
-        if (otherCounts.length > 0) {
-          output += (output ? ' + ' : '') + otherCounts.join(' + ');
-        }
-        return output || '0g';
-      };
-      
-      const calcRecipePureWeight = (items) => {
-        return items.reduce((total, item) => {
-          const ing = ingredients.find(i => i.id === Number(item.ingredientId));
-          if (!ing || ing.category === '包材類' || !isWeightUnit(ing.unit)) return total;
-          return total + (parseFloat(item.usage) || 0);
-        }, 0);
-      }
-
-      // --- Components ---
-      const MarginBadge = ({ val }) => (
-        <span className={`font-bold ${val < targetMargin ? 'text-red-500' : 'text-emerald-500'}`}>
-          {val.toFixed(1)}%
-        </span>
-      );
-
-      // --- Sidebar Component ---
-      const Sidebar = () => (
-        <>
-          {mobileMode && isSidebarOpen && (
-            <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setIsSidebarOpen(false)} />
-          )}
-
-          <div className={`
-            bg-slate-900 text-slate-100 p-4 flex flex-col gap-2 shadow-xl z-50 overflow-y-auto shrink-0 transition-all duration-300
-            ${mobileMode 
-              ? `fixed inset-y-0 left-0 w-64 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}` 
-              : 'w-full md:w-64 relative translate-x-0'
-            }
-          `}>
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-xl font-bold flex items-center gap-2 text-brand">
-                <Calculator /> 精算大師 <span className="text-xs bg-brand text-white px-1 rounded">V3.9</span>
-              </h1>
-              {mobileMode && (
-                <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-white">
-                  <X size={24}/>
-                </button>
-              )}
-            </div>
-
-            {[
-              { id: 'dashboard', icon: TrendingUp, label: '總覽分析' },
-              { id: 'vendors', icon: Users, label: '廠商管理' },
-              { id: 'ingredients', icon: Package, label: '原料管理' },
-              { id: 'recipes', icon: Utensils, label: '單品/配方' },
-              { id: 'sets', icon: Layers, label: '套餐管理' },
-              { id: 'projection', icon: BarChart3, label: '營收預估 (新!)' }
-            ].map(tab => (
-              <button key={tab.id} onClick={() => { setActiveTab(tab.id); if(mobileMode) setIsSidebarOpen(false); }} 
-                className={`p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === tab.id ? 'bg-brand text-white shadow-lg' : 'hover:bg-slate-800 text-slate-300'}`}>
-                <tab.icon size={20} /> {tab.label}
-              </button>
-            ))}
-            
-            <div className="mt-auto pt-4 border-t border-slate-700 space-y-2">
-              <button onClick={() => { setMobileMode(!mobileMode); setIsSidebarOpen(false); }} 
-                className={`w-full p-2 rounded text-xs flex items-center justify-center gap-2 font-bold transition-colors ${mobileMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                {mobileMode ? <><Monitor size={14}/> 切換回電腦版</> : <><Smartphone size={14}/> 切換手機排版</>}
-              </button>
-
-              <div className="text-xs text-slate-400 font-bold mb-1 mt-2">全系統備份 (JSON)</div>
-              <button onClick={() => {
-                 const blob = new Blob([JSON.stringify({ ingredients, recipes, sets, vendors, targetMargin, salesData })], { type: 'application/json' });
-                 const a = document.createElement('a');
-                 a.href = URL.createObjectURL(blob);
-                 a.download = `smartcost_backup_v3.9_${new Date().toISOString().slice(0,10)}.json`;
-                 a.click();
-              }} className="w-full p-2 bg-slate-800 hover:bg-slate-700 rounded text-xs flex items-center justify-center gap-2 border border-slate-600">
-                 <Download size={14} /> 備份資料庫
-              </button>
-              <label className="w-full p-2 bg-slate-800 hover:bg-slate-700 rounded text-xs flex items-center justify-center gap-2 cursor-pointer border border-slate-600">
-                 <Upload size={14} /> 還原資料庫
-                 <input type="file" className="hidden" accept=".json" onChange={(e) => {
-                    const file = e.target.files[0];
-                    if(!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      try {
-                        const d = JSON.parse(ev.target.result);
-                        if(d.ingredients) setIngredients(d.ingredients);
-                        if(d.recipes) setRecipes(d.recipes);
-                        if(d.sets) setSets(d.sets);
-                        if(d.vendors) setVendors(d.vendors);
-                        if(d.targetMargin) setTargetMargin(d.targetMargin);
-                        if(d.salesData) setSalesData(d.salesData);
-                        alert('資料庫還原成功！');
-                      } catch(err) { alert('檔案格式錯誤'); }
-                      e.target.value = '';
-                    };
-                    reader.readAsText(file);
-                 }} />
-              </label>
-            </div>
-          </div>
-        </>
-      );
-
-      const VendorsView = () => {  
-        const [isEditing, setIsEditing] = useState(null);
-        const [form, setForm] = useState({ name: '', contact: '', phone: '', note: '' });
-        const save = () => {
-          if(!form.name) return alert('請輸入廠商名稱');
-          const item = { id: isEditing || Date.now(), ...form };
-          if(isEditing) setVendors(prev => prev.map(v => v.id === isEditing ? item : v));
-          else setVendors(prev => [...prev, item]);
-          setIsEditing(null); setForm({ name: '', contact: '', phone: '', note: '' });
-        };
-        return (
-          <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">廠商管理</h2>
-            <div className="bg-white p-6 rounded-xl shadow-sm border mb-8">
-              <h3 className="font-bold text-slate-700 mb-4">{isEditing ? '編輯廠商' : '新增廠商'}</h3>
-              <div className={`grid grid-cols-1 ${md('md:grid-cols-4')} gap-4`}>
-                <div><label className="text-xs text-slate-500">廠商名稱</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="例如: 好市多" /></div>
-                <div><label className="text-xs text-slate-500">聯絡人</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} /></div>
-                <div><label className="text-xs text-slate-500">電話</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-                <div><label className="text-xs text-slate-500">備註</label><input className="w-full p-2 border rounded focus:ring-2 ring-brand outline-none" value={form.note} onChange={e => setForm({...form, note: e.target.value})} /></div>
-                <div className={`${md('md:col-span-4')} flex gap-2`}>
-                  <button onClick={save} className="bg-brand text-white px-6 py-2 rounded font-bold">{isEditing ? '更新' : '新增'}</button>
-                  {isEditing && <button onClick={() => {setIsEditing(null); setForm({ name: '', contact: '', phone: '', note: '' });}} className="bg-gray-400 text-white px-4 rounded">取消</button>}
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl shadow overflow-hidden">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 border-b"><tr><th className="p-4">名稱</th><th className="p-4">聯絡資訊</th><th className="p-4">備註</th><th className="p-4 text-right">操作</th></tr></thead>
-                <tbody>{vendors.map(v => (<tr key={v.id} className="border-b hover:bg-slate-50"><td className="p-4 font-bold">{v.name}</td><td className="p-4 text-sm"><div>{v.contact}</div><div className="text-slate-400">{v.phone}</div></td><td className="p-4 text-sm text-slate-500">{v.note}</td><td className="p-4 text-right"><button onClick={() => {setIsEditing(v.id); setForm(v);}} className="text-slate-400 hover:text-brand mr-2"><Edit3 size={16}/></button><button onClick={() => confirm('確認刪除?') && setVendors(p => p.filter(x=>x.id!==v.id))} className="text-slate-400 hover:text-red-600"><Trash2 size={16}/></button></td></tr>))}</tbody>
-              </table>
-            </div>
-          </div>
-        );
-      };
-
-      const RecipesView = () => {
+    const RecipesView = ({ recipes, setRecipes, ingredients, getUnitCost, calcRecipeCost, mobileMode, targetMargin }) => {
         const [viewMode, setViewMode] = useState('list');
         const [layout, setLayout] = useState('grid');
         const [searchTerm, setSearchTerm] = useState('');
@@ -692,6 +530,15 @@
         const [form, setForm] = useState({ name: '', sellingPrice: '', deliveryRate: 32, deliveryPrice: '', items: [] });
         const [editingId, setEditingId] = useState(null);
         const [isReadOnly, setIsReadOnly] = useState(false);
+        const md = (classes) => mobileMode ? '' : classes;
+
+        const downloadRecipeTemplate = () => {
+          const headers = ['產品名稱(必填)', '原物料名稱(系統內)', '使用量'];
+          const ex1 = ['範例拿鐵', '紐西蘭牛奶', '0.2'];
+          const ex2 = ['範例拿鐵', '紙杯(12oz)', '1'];
+          const content = '\uFEFF' + [headers, ex1].map(e => e.join(',')).join('\n');
+          downloadFile(content, '食譜匯入範本.csv');
+        };
 
         const handleRecipeImport = (e) => {
           const file = e.target.files[0];
@@ -701,19 +548,15 @@
             const { lines, parseLine, error } = parseCSV(ev.target.result);
             if (error) return alert(error);
             const recipeMap = {};
-            const missingIngs = new Set();
             lines.forEach((line) => {
               const cols = parseLine(line);
               if (cols.length < 3) return;
               const rName = cols[0].trim();
               const ingName = cols[1].trim();
               const usage = parseFloat(cols[2].replace(/,/g, '')) || 0;
-              
               if (!rName || !ingName) return;
-
               const foundIng = ingredients.find(i => i.name === ingName);
-              if (!foundIng) { missingIngs.add(ingName); return; }
-              
+              if (!foundIng) return;
               if (!recipeMap[rName]) {
                 recipeMap[rName] = { id: Date.now() + Math.random(), name: rName, sellingPrice: 0, deliveryRate: 32, deliveryPrice: 0, items: [] };
               }
@@ -722,31 +565,26 @@
             const newRecipes = Object.values(recipeMap);
             if (newRecipes.length > 0) {
               setRecipes(prev => [...prev, ...newRecipes]);
-              alert(`匯入 ${newRecipes.length} 個配方！\n(請記得設定產品售價)\n${missingIngs.size>0 ? `(略過未知原料: ${Array.from(missingIngs).join(',')})` : ''}`);
+              alert(`匯入 ${newRecipes.length} 個配方！`);
             }
             e.target.value = '';
           };
           reader.readAsText(file);
         };
 
-        const downloadRecipeTemplate = () => {
-          const headers = ['產品名稱(必填)', '原物料名稱(系統內)', '使用量'];
-          const ex1 = ['範例拿鐵', '紐西蘭牛奶', '0.2'];
-          const ex2 = ['範例拿鐵', '紙杯(12oz)', '1'];
-          const content = '\uFEFF' + [headers, ex1, ex2].map(e => e.join(',')).join('\n');
-          downloadFile(content, '食譜匯入範本.csv');
-        };
-
         const enrichedRecipes = useMemo(() => {
           return recipes.map(r => {
             const cost = calcRecipeCost(r.items);
-            const weight = calcRecipePureWeight(r.items);
-            const displayW = calcRecipeDisplay(r.items);
+            const weight = r.items.reduce((t, i) => { const ing = ingredients.find(x=>x.id===i.ingredientId); return t + (ing && isWeightUnit(ing.unit) ? parseFloat(i.usage) : 0)}, 0);
             const margin = r.sellingPrice > 0 ? ((r.sellingPrice - cost) / r.sellingPrice) * 100 : 0;
-            const delPrice = parseFloat(r.deliveryPrice) || parseFloat(r.sellingPrice) || 0;
-            const delCommission = (delPrice * (parseFloat(r.deliveryRate) || 0)) / 100;
+            const delPrice = parseFloat(r.deliveryPrice) || 0;
+            const delRate = parseFloat(r.deliveryRate) || 0;
+            const delCommission = (delPrice * delRate) / 100;
             const delProfit = delPrice - delCommission - cost;
-            return { ...r, cost, weight, displayW, margin, delProfit };
+            // Modified: Delivery Margin = (DelPrice - FoodCost) / DelPrice
+            const delMargin = delPrice > 0 ? ((delPrice - cost) / delPrice) * 100 : 0;
+            const profit = (r.sellingPrice || 0) - cost;
+            return { ...r, cost, weight, margin, profit, delPrice, delCommission, delProfit, delMargin };
           });
         }, [recipes, ingredients]);
 
@@ -797,32 +635,22 @@
         const saveAsIngredient = () => {
             if (!form.name || form.items.length === 0) return alert('請先建立配方');
             const cost = calcRecipeCost(form.items);
-            const rawWeight = calcRecipePureWeight(form.items); 
+            const rawWeight = form.items.reduce((t, i) => { const ing = ingredients.find(x=>x.id===i.ingredientId); return t + (ing && isWeightUnit(ing.unit) ? parseFloat(i.usage) : 0)}, 0);
             const finalWeightStr = prompt(`【建立動態組合原料】\n此配方會與原料庫建立連結，成本將隨時自動更新。\n\n原始重量: ${rawWeight.toFixed(1)}g\n請輸入「成品最終重量 (g)」以計算濃縮/耗損：`, rawWeight);
             if (finalWeightStr === null) return;
             const finalWeight = parseFloat(finalWeightStr) || rawWeight;
-            
-            let recipeId = editingId;
-            if (recipeId === 'new') {
-               recipeId = Date.now();
-               const newRecipe = { ...form, id: recipeId };
-               setRecipes(prev => [...prev, newRecipe]);
-               setEditingId(recipeId);
-            }
-  
-            const newIng = {
-              id: Date.now() + 1, name: `[組合] ${form.name}`, category: '組合材料', price: 0, amount: finalWeight, unit: 'g', sourceRecipeId: recipeId,
-              inputAmount: finalWeight, inputUnit: 'g',
-              note: `連結配方: ${form.name} (產出:${finalWeight}g)`
-            };
-            setIngredients(prev => [...prev, newIng]);
-            alert(`已建立動態原料！`);
+            alert(`請手動至原料管理新增，選擇「組合材料」並備註關聯。`);
         };
 
         const cost = calcRecipeCost(form.items);
-        const displayWeight = calcRecipeDisplay(form.items);
         const profit = (parseFloat(form.sellingPrice) || 0) - cost;
         const margin = parseFloat(form.sellingPrice) > 0 ? (profit / parseFloat(form.sellingPrice)) * 100 : 0;
+        const delPrice = parseFloat(form.deliveryPrice) || 0;
+        const delRate = parseFloat(form.deliveryRate) || 0;
+        const delCommission = (delPrice * delRate) / 100;
+        const delProfit = delPrice - delCommission - cost;
+        // Modified Calculation in Editor:
+        const delMargin = delPrice > 0 ? ((delPrice - cost) / delPrice) * 100 : 0;
 
         if (viewMode === 'edit') return (
           <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
@@ -832,27 +660,28 @@
                   {isReadOnly ? <Lock className="text-slate-400" size={20}/> : <Unlock className="text-brand" size={20}/>} 
                   {isReadOnly ? '單品詳情 (唯讀)' : '單品編輯'}
                 </h2>
-                <div className="space-x-2">
-                   <button onClick={saveAsIngredient} className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 font-bold border border-purple-200 flex items-center gap-1 inline-flex"><Link2 size={12}/> 轉存為動態原料</button>
-                   <button onClick={() => setViewMode('list')} className="text-slate-500 border px-3 py-1 rounded hover:bg-slate-100">返回</button>
-                </div>
+                <button onClick={() => setViewMode('list')} className="text-slate-500 border px-3 py-1 rounded hover:bg-slate-100">返回</button>
               </div>
-              
               <div className={`grid grid-cols-1 ${md('md:grid-cols-2')} gap-6 mb-6`}>
                 <div className="space-y-4">
                   <h3 className="font-bold text-slate-700">基本資料</h3>
                   <div><label className="text-xs font-bold text-slate-500">品名</label><input disabled={isReadOnly} className={`w-full p-2 border rounded ${isReadOnly?'input-disabled':''}`} value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
                   <div><label className="text-xs font-bold text-slate-500">店內售價</label><input disabled={isReadOnly} type="number" className={`w-full p-2 border rounded ${isReadOnly?'input-disabled':''}`} value={form.sellingPrice} onChange={e => setForm({...form, sellingPrice: e.target.value})} /></div>
                 </div>
-                <div className="space-y-4 bg-orange-50 p-4 rounded border border-orange-100">
-                   <h3 className="font-bold text-orange-800">外送試算</h3>
+                <div className="space-y-4 bg-orange-50 p-4 rounded border border-orange-100 relative">
+                   <h3 className="font-bold text-orange-800 flex items-center gap-2"><Bike size={18}/> 外送平台試算</h3>
                    <div className="flex gap-2">
-                     <input disabled={isReadOnly} type="number" className={`w-1/2 p-2 border rounded ${isReadOnly?'input-disabled':''}`} placeholder="抽成%" value={form.deliveryRate} onChange={e => setForm({...form, deliveryRate: e.target.value})} />
-                     <input disabled={isReadOnly} type="number" className={`w-1/2 p-2 border rounded ${isReadOnly?'input-disabled':''}`} placeholder="外送價" value={form.deliveryPrice} onChange={e => setForm({...form, deliveryPrice: e.target.value})} />
+                     <div className="w-1/2"><label className="text-xs font-bold text-orange-700/70">平台抽成 (%)</label><input disabled={isReadOnly} type="number" className={`w-full p-2 border rounded ${isReadOnly?'input-disabled':''}`} placeholder="32" value={form.deliveryRate} onChange={e => setForm({...form, deliveryRate: e.target.value})} /></div>
+                     <div className="w-1/2"><label className="text-xs font-bold text-orange-700/70">外送定價 ($)</label><input disabled={isReadOnly} type="number" className={`w-full p-2 border rounded ${isReadOnly?'input-disabled':''}`} placeholder="0" value={form.deliveryPrice} onChange={e => setForm({...form, deliveryPrice: e.target.value})} /></div>
                    </div>
+                   {delPrice > 0 && (
+                     <div className="mt-2 pt-2 border-t border-orange-200 text-sm">
+                       <div className="flex justify-between text-orange-800/70"><span>抽成: -${delCommission.toFixed(1)}</span></div>
+                       <div className="flex justify-between font-bold text-orange-900 mt-1"><span>外送淨利: ${delProfit.toFixed(1)} <span className="text-xs font-normal">({delMargin.toFixed(1)}% 毛利)</span></span></div>
+                     </div>
+                   )}
                 </div>
               </div>
-              
               <div className="mb-4 flex justify-between items-end border-b pb-2">
                 <h3 className="font-bold text-slate-700">食材配方</h3>
                 {!isReadOnly && <button onClick={() => setForm({...form, items: [...form.items, { ingredientId: '', usage: 0 }]})} className="text-sm bg-brand text-white px-3 py-1 rounded"><Plus size={14} className="inline"/> 加入</button>}
@@ -871,14 +700,11 @@
                   )
                 })}
               </div>
-
               <div className="bg-slate-800 text-white p-4 rounded-xl flex justify-between items-center shadow-lg text-sm">
                 <div className="flex gap-6">
                   <div><div className="text-slate-400">總成本</div><div className="text-xl text-red-300 font-bold">${cost.toFixed(1)}</div></div>
-                  <div><div className="text-slate-400">總規格</div><div className="text-lg text-blue-300 font-bold">{displayWeight}</div></div>
-                  <div><div className="text-slate-400">毛利</div><div className="text-xl text-emerald-400 font-bold">${profit.toFixed(1)}</div></div>
+                  <div><div className="text-slate-400">店內毛利</div><div className="text-xl text-emerald-400 font-bold">${profit.toFixed(1)}</div></div>
                 </div>
-                {/* 狀態切換按鈕 */}
                 {isReadOnly ? (
                   <button onClick={() => setIsReadOnly(false)} className="bg-slate-600 hover:bg-slate-500 px-6 py-2 rounded font-bold flex items-center gap-2"><Edit3 size={16}/> 解鎖編輯</button>
                 ) : (
@@ -893,62 +719,44 @@
           <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <h2 className="text-2xl font-bold text-slate-800">單品/配方列表 ({recipes.length})</h2>
-              
               <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-                <div className="relative">
-                  <input 
-                    className="pl-8 pr-4 py-2 border rounded-lg focus:ring-2 ring-brand outline-none w-full" 
-                    placeholder="搜尋產品..." 
-                    value={searchTerm} 
-                    onChange={e => setSearchTerm(e.target.value)} 
-                  />
-                  <span className="absolute left-2.5 top-2.5 text-slate-400"><Search size={16}/></span>
-                </div>
-                
+                <div className="relative"><input className="pl-8 pr-4 py-2 border rounded-lg focus:ring-2 ring-brand outline-none w-full" placeholder="搜尋..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /><span className="absolute left-2.5 top-2.5 text-slate-400"><Search size={16}/></span></div>
                 <div className="flex bg-white rounded-lg border overflow-hidden shrink-0">
-                  <button onClick={() => setLayout('grid')} className={`p-2 ${layout==='grid'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`} title="卡片檢視"><LayoutGrid size={18}/></button>
-                  <button onClick={() => setLayout('list')} className={`p-2 ${layout==='list'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`} title="清單檢視"><List size={18}/></button>
-                  <button onClick={() => setLayout('detail')} className={`p-2 ${layout==='detail'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`} title="詳細資料"><Table size={18}/></button>
+                  <button onClick={() => setLayout('grid')} className={`p-2 ${layout==='grid'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`}><LayoutGrid size={18}/></button>
+                  <button onClick={() => setLayout('list')} className={`p-2 ${layout==='list'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`}><List size={18}/></button>
+                  <button onClick={() => setLayout('detail')} className={`p-2 ${layout==='detail'?'bg-brand-light text-brand':'text-slate-400 hover:bg-slate-50'}`}><Table size={18}/></button>
                 </div>
                 <button onClick={() => startEdit(null)} className="bg-brand text-white px-4 py-2 rounded-lg flex items-center gap-2 shrink-0 hover:opacity-90"><Plus size={18}/> 新增</button>
               </div>
             </div>
-
-            {/* Grid View */}
             {layout === 'grid' && (
               <div className={`grid grid-cols-1 ${md('md:grid-cols-2 lg:grid-cols-3')} gap-6`}>
                 {processedRecipes.map(r => (
-                  <div key={r.id} className="bg-white p-5 rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer" onClick={() => startEdit(r)}>
-                    <div className="flex justify-between mb-3">
+                  <div key={r.id} className="bg-white p-5 rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden" onClick={() => startEdit(r)}>
+                    {r.delPrice > 0 && <div className="absolute top-0 right-0 bg-orange-100 text-orange-600 text-[10px] px-2 py-1 font-bold rounded-bl">外送有賺</div>}
+                    <div className="flex justify-between mb-3 mt-1">
                       <h3 className="font-bold text-lg">{r.name}</h3>
                       <button onClick={(e) => { e.stopPropagation(); startEdit(r); }} className="text-slate-400 hover:text-brand"><Edit3 size={16}/></button>
                     </div>
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between"><span>售價</span><span className="font-bold">${r.sellingPrice}</span></div>
+                      <div className="flex justify-between"><span>店內售價</span><span className="font-bold">${r.sellingPrice}</span></div>
                       <div className="flex justify-between text-slate-500"><span>成本</span><span className="text-red-500">${r.cost.toFixed(1)}</span></div>
-                      <div className="border-t pt-2 flex justify-between font-bold"><span>毛利率</span><MarginBadge val={r.margin} /></div>
+                      <div className="border-t pt-2 flex justify-between font-bold">
+                          <span>店內</span>
+                          <span className="text-emerald-600">${r.profit.toFixed(1)} <span className="text-xs font-normal">({r.margin.toFixed(0)}%)</span></span>
+                      </div>
+                      {r.delPrice > 0 && (
+                        <div className="flex justify-between text-xs text-orange-600 mt-1 bg-orange-50 px-1 rounded">
+                            <span>外送</span>
+                            <span>${r.delProfit.toFixed(1)} <span className="text-[10px] font-normal">({r.delMargin.toFixed(0)}% 毛利)</span></span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            
-            {/* List/Detail Views omitted for brevity, logic identical to v3.8 */}
-            {layout === 'list' && (
-              <div className="bg-white rounded-xl shadow border overflow-hidden">
-                {processedRecipes.map(r => (
-                  <div key={r.id} className="flex justify-between items-center p-4 border-b last:border-0 hover:bg-slate-50 cursor-pointer" onClick={() => startEdit(r)}>
-                    <div className="font-bold text-slate-700">{r.name}</div>
-                    <div className="flex gap-6 text-sm">
-                      <div className="text-center w-20"><div className="text-xs text-slate-400">售價</div><div>${r.sellingPrice}</div></div>
-                      <div className="text-center w-20"><div className="text-xs text-slate-400">成本</div><div className="text-red-500">${r.cost.toFixed(1)}</div></div>
-                      <div className="text-center w-20"><div className="text-xs text-slate-400">毛利</div><MarginBadge val={r.margin} /></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {layout === 'detail' && (
+            {(layout === 'list' || layout === 'detail') && (
               <div className="bg-white rounded-xl shadow border overflow-x-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-b">
@@ -956,8 +764,7 @@
                       <th className="p-4 sortable-header" onClick={() => handleSort('name')}>品名 <ArrowUpDown size={12} className="inline"/></th>
                       <th className="p-4 sortable-header text-right" onClick={() => handleSort('sellingPrice')}>售價 <ArrowUpDown size={12} className="inline"/></th>
                       <th className="p-4 sortable-header text-right" onClick={() => handleSort('cost')}>成本 <ArrowUpDown size={12} className="inline"/></th>
-                      <th className="p-4 sortable-header text-right" onClick={() => handleSort('margin')}>毛利率 <ArrowUpDown size={12} className="inline"/></th>
-                      <th className="p-4 sortable-header text-right" onClick={() => handleSort('weight')}>淨重 <ArrowUpDown size={12} className="inline"/></th>
+                      <th className="p-4 sortable-header text-right" onClick={() => handleSort('margin')}>店內獲利 <ArrowUpDown size={12} className="inline"/></th>
                       <th className="p-4 sortable-header text-right" onClick={() => handleSort('delProfit')}>外送獲利 <ArrowUpDown size={12} className="inline"/></th>
                       <th className="p-4 text-center">操作</th>
                     </tr>
@@ -968,9 +775,8 @@
                         <td className="p-4 font-bold text-slate-700">{r.name}</td>
                         <td className="p-4 text-right">${r.sellingPrice}</td>
                         <td className="p-4 text-right text-red-500">${r.cost.toFixed(1)}</td>
-                        <td className="p-4 text-right"><MarginBadge val={r.margin} /></td>
-                        <td className="p-4 text-right text-blue-500">{r.displayW}</td>
-                        <td className="p-4 text-right text-orange-600">${r.delProfit.toFixed(1)}</td>
+                        <td className="p-4 text-right text-emerald-600">${r.profit.toFixed(1)} ({r.margin.toFixed(0)}%)</td>
+                        <td className={`p-4 text-right font-bold ${r.delProfit<0 ? 'text-red-500' : 'text-orange-600'}`}>{r.delPrice > 0 ? `$${r.delProfit.toFixed(1)} (${r.delMargin.toFixed(0)}% 毛利)` : '-'}</td>
                         <td className="p-4 text-center">
                           <button onClick={(e) => { e.stopPropagation(); startEdit(r); }} className="text-slate-400 hover:text-brand p-1"><Edit3 size={16}/></button>
                         </td>
@@ -982,12 +788,13 @@
             )}
           </div>
         );
-      };
+    };
 
-      const SetsView = () => {
+    const SetsView = ({ sets, setSets, recipes, calcRecipeCost, targetMargin, mobileMode }) => {
         const [isEditing, setIsEditing] = useState(false);
         const [form, setForm] = useState({ name: '', sellingPrice: '', items: [] });
         const [editId, setEditId] = useState(null);
+        const md = (classes) => mobileMode ? '' : classes;
 
         const updateItem = (rid, delta) => {
           setForm(prev => {
@@ -1062,7 +869,7 @@
                        <div className="text-right"><div className="text-xs text-slate-400">售價</div><div className="font-bold">${s.sellingPrice}</div></div>
                        <div className="text-right"><div className="text-xs text-slate-400">成本</div><div className="text-red-500 font-bold">${c.toFixed(1)}</div></div>
                        <div className="text-right"><div className="text-xs text-slate-400">毛利額</div><div className="font-bold text-emerald-600">${(s.sellingPrice - c).toFixed(1)}</div></div>
-                       <div className="text-right"><div className="text-xs text-slate-400">毛利率</div><div className="font-bold"><MarginBadge val={m} /></div></div>
+                       <div className="text-right"><div className="text-xs text-slate-400">毛利率</div><div className="font-bold"><MarginBadge val={m} targetMargin={targetMargin} /></div></div>
                        <div className="flex gap-1">
                          <button onClick={(e) => { e.stopPropagation(); setEditId(s.id); setForm(s); setIsEditing(true); }} className="p-2 bg-slate-100 rounded hover:bg-brand-light text-slate-600"><Edit3 size={16}/></button>
                          <button onClick={(e) => { e.stopPropagation(); confirm('刪除?') && setSets(prev => prev.filter(x => x.id !== s.id)); }} className="p-2 bg-slate-100 rounded hover:bg-red-100 text-red-500"><Trash2 size={16}/></button>
@@ -1074,9 +881,10 @@
             </div>
           </div>
         );
-      };
+    };
 
-      const DashboardView = () => {
+    const DashboardView = ({ recipes, sets, targetMargin, setTargetMargin, calcRecipeCost, mobileMode }) => {
+        const md = (classes) => mobileMode ? '' : classes;
         const lowMarginRecipes = recipes.filter(r => {
            const c = calcRecipeCost(r.items);
            return r.sellingPrice > 0 && ((r.sellingPrice - c)/r.sellingPrice)*100 < targetMargin;
@@ -1115,11 +923,20 @@
             </div>
           </div>
         );
-      };
+    };
 
-      const ProjectionView = () => {
-        const updateSales = (id, val) => {
-            setSalesData(prev => ({ ...prev, [id]: parseFloat(val) || 0 }));
+    const ProjectionView = ({ recipes, sets, salesData, setSalesData, calcRecipeCost, targetMargin, mobileMode }) => {
+        const md = (classes) => mobileMode ? '' : classes;
+        
+        const updateSales = (id, field, val) => {
+            setSalesData(prev => {
+                const current = prev[id] || { qty: "", delQty: "" };
+                const safeCurrent = typeof current === 'number' ? { qty: String(current), delQty: "" } : current;
+                return { 
+                    ...prev, 
+                    [id]: { ...safeCurrent, [field]: val } 
+                };
+            });
         };
 
         const projection = useMemo(() => {
@@ -1136,25 +953,45 @@
                 })
             ];
             const rows = allItems.map(item => {
-                const qty = salesData[item.id] || 0;
-                const subRevenue = qty * item.sellingPrice;
-                const subCost = qty * item.cost;
+                const data = salesData[item.id] || { qty: "", delQty: "" };
+                const safeData = typeof data === 'number' ? { qty: String(data), delQty: "" } : data;
+                
+                const qtyNum = parseFloat(safeData.qty) || 0;
+                const delQtyNum = parseFloat(safeData.delQty) || 0;
+                
+                const inRev = qtyNum * item.sellingPrice;
+                const inCost = qtyNum * item.cost;
+                
+                const effectiveDelPrice = parseFloat(item.deliveryPrice) > 0 ? parseFloat(item.deliveryPrice) : item.sellingPrice;
+                const delRate = parseFloat(item.deliveryRate) || 0;
+                
+                const delGrossRev = delQtyNum * effectiveDelPrice;
+                const delCommission = delGrossRev * (delRate / 100);
+                const delFoodCost = delQtyNum * item.cost;
+                
+                const subRevenue = inRev + delGrossRev;
+                const subCost = inCost + delFoodCost + delCommission;
+                const subProfit = subRevenue - subCost;
+
                 totalRevenue += subRevenue;
                 totalCost += subCost;
-                return { ...item, qty, subRevenue, subCost };
+                
+                return { ...item, qty: safeData.qty, delQty: safeData.delQty, subRevenue, subCost, subProfit };
             });
+            
             const totalProfit = totalRevenue - totalCost;
             const totalMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
             const costPct = totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0;
+            
             return { rows, totalRevenue, totalCost, totalProfit, totalMargin, costPct };
-        }, [recipes, sets, ingredients, salesData]);
+        }, [recipes, sets, salesData, calcRecipeCost]); 
 
         return (
             <div className="p-6 h-full overflow-y-auto bg-gray-50 flex-1">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><BarChart3/> 營收預估模擬器</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-blue-200">
-                        <div className="text-sm text-slate-500 mb-1">預估月營業額</div>
+                        <div className="text-sm text-slate-500 mb-1">預估月營業額 (含外送)</div>
                         <div className="text-3xl font-bold text-blue-600">${projection.totalRevenue.toLocaleString()}</div>
                     </div>
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-200">
@@ -1165,7 +1002,7 @@
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-red-200">
-                        <div className="text-sm text-slate-500 mb-1">預估食材採購成本</div>
+                        <div className="text-sm text-slate-500 mb-1">總成本 (食材+抽成)</div>
                         <div className="flex items-end gap-2">
                             <div className="text-3xl font-bold text-red-600">${projection.totalCost.toLocaleString()}</div>
                             <div className="text-lg font-bold text-red-400 mb-1">({projection.costPct.toFixed(1)}%)</div>
@@ -1181,31 +1018,39 @@
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-slate-600 border-b text-sm">
                                 <tr>
-                                    <th className="p-3">類別</th>
-                                    <th className="p-3">品項名稱</th>
-                                    <th className="p-3 text-right">單價</th>
-                                    <th className="p-3 text-right">單位成本</th>
-                                    <th className="p-3 text-right">單品毛利</th>
-                                    <th className="p-3 text-center w-32 bg-orange-50 border-x border-orange-100">預估月銷量</th>
-                                    <th className="p-3 text-right">營收小計</th>
-                                    <th className="p-3 text-right">成本小計</th>
+                                    <th className="p-3">品項</th>
+                                    <th className="p-3 text-right">店內價</th>
+                                    <th className="p-3 text-right">外送價</th>
+                                    <th className="p-3 text-right">成本</th>
+                                    <th className="p-3 text-center bg-blue-50 border-x border-blue-100 w-24">店內銷量</th>
+                                    <th className="p-3 text-center bg-orange-50 border-r border-orange-100 w-24">外送銷量</th>
+                                    <th className="p-3 text-right">總營收</th>
+                                    <th className="p-3 text-right">總毛利</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {projection.rows.map(row => {
-                                    const margin = row.sellingPrice > 0 ? ((row.sellingPrice - row.cost)/row.sellingPrice)*100 : 0;
                                     return (
                                         <tr key={row.id} className="hover:bg-slate-50">
-                                            <td className="p-3"><span className={`text-xs px-2 py-1 rounded ${row.type==='套餐'?'bg-purple-100 text-purple-700':'bg-blue-100 text-blue-700'}`}>{row.type}</span></td>
-                                            <td className="p-3 font-medium text-slate-700">{row.name}</td>
-                                            <td className="p-3 text-right text-slate-500">${row.sellingPrice}</td>
-                                            <td className="p-3 text-right text-slate-400">${row.cost.toFixed(1)}</td>
-                                            <td className="p-3 text-right"><MarginBadge val={margin} /></td>
-                                            <td className="p-3 text-center bg-orange-50/30 border-x border-orange-100">
-                                                <input type="number" className="w-24 p-1 border border-brand/50 rounded text-center font-bold focus:ring-2 ring-brand outline-none" value={salesData[row.id] || ''} onChange={e => updateSales(row.id, e.target.value)} placeholder="0" />
+                                            <td className="p-3">
+                                                <div className="font-medium text-slate-700">{row.name}</div>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${row.type==='套餐'?'bg-purple-100 text-purple-700':'bg-gray-100 text-gray-500'}`}>{row.type}</span>
                                             </td>
+                                            <td className="p-3 text-right text-slate-500">${row.sellingPrice}</td>
+                                            <td className="p-3 text-right text-slate-500">${row.deliveryPrice || row.sellingPrice}</td>
+                                            <td className="p-3 text-right text-slate-400">${row.cost.toFixed(1)}</td>
+                                            
+                                            <td className="p-3 text-center bg-blue-50/30 border-x border-blue-100">
+                                                <input type="number" className="w-16 p-1 border border-blue-200 rounded text-center font-bold focus:ring-2 ring-blue-400 outline-none" 
+                                                    value={row.qty} onChange={e => updateSales(row.id, 'qty', e.target.value)} placeholder="0" />
+                                            </td>
+                                            <td className="p-3 text-center bg-orange-50/30 border-r border-orange-100">
+                                                <input type="number" className="w-16 p-1 border border-orange-200 rounded text-center font-bold focus:ring-2 ring-orange-400 outline-none" 
+                                                    value={row.delQty} onChange={e => updateSales(row.id, 'delQty', e.target.value)} placeholder="0" />
+                                            </td>
+                                            
                                             <td className="p-3 text-right font-bold text-blue-600">${row.subRevenue.toLocaleString()}</td>
-                                            <td className="p-3 text-right font-mono text-red-500">${row.subCost.toLocaleString()}</td>
+                                            <td className={`p-3 text-right font-bold ${row.subProfit<0?'text-red-500':'text-emerald-600'}`}>${row.subProfit.toLocaleString()}</td>
                                         </tr>
                                     );
                                 })}
@@ -1215,6 +1060,109 @@
                 </div>
             </div>
         );
+    };
+
+    const SmartCostApp = () => {
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [mobileMode, setMobileMode] = useState(false);
+      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+      
+      const md = (classes) => mobileMode ? '' : classes;
+
+      useEffect(() => {
+        const checkMobile = () => { if (window.innerWidth < 768) setMobileMode(true); };
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+      }, []);
+
+      // --- Data State ---
+      const initialVendors = [{ id: 1, name: '好市多', contact: '客服', phone: '', note: '' }];
+      const initialIngredients = [
+        { id: 1, name: '豬五花', price: 900, unit: 'g', amount: 3000, inputAmount: 3, inputUnit: 'kg', note: '3kg $900', category: '肉海鮮類', vendorId: 1, yieldRate: 100 },
+        { id: 2, name: '蒜頭', price: 150, unit: 'g', amount: 600, inputAmount: 600, inputUnit: 'g', note: '600g $150', category: '蔬果類', vendorId: '', yieldRate: 95 }, 
+        { id: 3, name: '紙碗', price: 200, unit: '個', amount: 50, inputAmount: 50, inputUnit: '個', note: '50個 $200', category: '包材類', vendorId: '', yieldRate: 100 },
+        { id: 4, name: '洗選蛋', price: 8, unit: '顆', amount: 1, inputAmount: 1, inputUnit: '顆', note: '1顆 $8', category: '肉海鮮類', vendorId: '', yieldRate: 100 },
+      ];
+      const initialRecipes = [
+        { id: 1, name: '蒜泥白肉', sellingPrice: 200, items: [{ ingredientId: 1, usage: 250 }, { ingredientId: 2, usage: 10 }], deliveryRate: 32, deliveryPrice: 220 }
+      ];
+
+      const [vendors, setVendors] = useState(() => JSON.parse(localStorage.getItem('sc_v43_vendors')) || initialVendors);
+      const [ingredients, setIngredients] = useState(() => {
+        const d = JSON.parse(localStorage.getItem('sc_v43_ing')) || initialIngredients;
+        return d.map(i => ({
+            ...i, 
+            sourceRecipeId: i.sourceRecipeId || null,
+            inputAmount: i.inputAmount || (i.unit === 'g' ? i.amount / 1000 : i.amount), 
+            inputUnit: i.inputUnit || (i.unit === 'g' ? 'kg' : i.unit) 
+        })); 
+      });
+      const [recipes, setRecipes] = useState(() => JSON.parse(localStorage.getItem('sc_v43_rec')) || initialRecipes);
+      const [sets, setSets] = useState(() => JSON.parse(localStorage.getItem('sc_v43_sets')) || []);
+      const [targetMargin, setTargetMargin] = useState(() => Number(localStorage.getItem('sc_v43_margin')) || 50);
+      
+      const [salesData, setSalesData] = useState(() => JSON.parse(localStorage.getItem('sc_v43_sales')) || {});
+
+      useEffect(() => localStorage.setItem('sc_v43_vendors', JSON.stringify(vendors)), [vendors]);
+      useEffect(() => localStorage.setItem('sc_v43_ing', JSON.stringify(ingredients)), [ingredients]);
+      useEffect(() => localStorage.setItem('sc_v43_rec', JSON.stringify(recipes)), [recipes]);
+      useEffect(() => localStorage.setItem('sc_v43_sets', JSON.stringify(sets)), [sets]);
+      useEffect(() => localStorage.setItem('sc_v43_margin', targetMargin), [targetMargin]);
+      useEffect(() => localStorage.setItem('sc_v43_sales', JSON.stringify(salesData)), [salesData]);
+
+      // --- Calculations ---
+      const calculateRecipeCostRecursive = (items) => {
+        return items.reduce((total, item) => {
+          const ing = ingredients.find(i => i.id === Number(item.ingredientId));
+          return total + (ing ? getUnitCost(ing) : 0) * item.usage;
+        }, 0);
+      };
+
+      const getUnitCost = (ing) => {
+        if (!ing) return 0;
+        if (ing.sourceRecipeId) {
+          const sourceRecipe = recipes.find(r => r.id === ing.sourceRecipeId);
+          if (sourceRecipe) {
+            const recipeTotalCost = calculateRecipeCostRecursive(sourceRecipe.items);
+            return ing.amount > 0 ? recipeTotalCost / ing.amount : 0;
+          }
+        }
+        if (!ing.amount) return 0;
+        const baseCost = ing.price / ing.amount;
+        const yieldRate = (ing.yieldRate || 100) / 100;
+        return yieldRate > 0 ? baseCost / yieldRate : baseCost;
+      };
+
+      const calcRecipeCost = (items) => calculateRecipeCostRecursive(items);
+
+      // --- Backup Handlers ---
+      const handleBackup = () => {
+         const blob = new Blob([JSON.stringify({ ingredients, recipes, sets, vendors, targetMargin, salesData })], { type: 'application/json' });
+         const a = document.createElement('a');
+         a.href = URL.createObjectURL(blob);
+         a.download = `smartcost_backup_v4.3_${new Date().toISOString().slice(0,10)}.json`;
+         a.click();
+      };
+
+      const handleRestore = (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const d = JSON.parse(ev.target.result);
+            if(d.ingredients) setIngredients(d.ingredients);
+            if(d.recipes) setRecipes(d.recipes);
+            if(d.sets) setSets(d.sets);
+            if(d.vendors) setVendors(d.vendors);
+            if(d.targetMargin) setTargetMargin(d.targetMargin);
+            if(d.salesData) setSalesData(d.salesData);
+            alert('資料庫還原成功！');
+          } catch(err) { alert('檔案格式錯誤'); }
+          e.target.value = '';
+        };
+        reader.readAsText(file);
       };
 
       return (
@@ -1226,14 +1174,25 @@
               <div className="w-8"></div>
             </div>
           )}
-          <Sidebar />
+          
+          <Sidebar 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            mobileMode={mobileMode} 
+            setMobileMode={setMobileMode}
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            onBackup={handleBackup}
+            onRestore={handleRestore}
+          />
+
           <div className="flex-1 overflow-hidden relative flex flex-col">
-            {activeTab === 'dashboard' && <DashboardView />}
-            {activeTab === 'vendors' && <VendorsView />}
+            {activeTab === 'dashboard' && <DashboardView recipes={recipes} sets={sets} targetMargin={targetMargin} setTargetMargin={setTargetMargin} calcRecipeCost={calcRecipeCost} mobileMode={mobileMode} />}
+            {activeTab === 'vendors' && <VendorsView vendors={vendors} setVendors={setVendors} mobileMode={mobileMode} />}
             {activeTab === 'ingredients' && <IngredientsView ingredients={ingredients} setIngredients={setIngredients} vendors={vendors} setVendors={setVendors} getUnitCost={getUnitCost} />}
-            {activeTab === 'recipes' && <RecipesView />}
-            {activeTab === 'sets' && <SetsView />}
-            {activeTab === 'projection' && <ProjectionView />}
+            {activeTab === 'recipes' && <RecipesView recipes={recipes} setRecipes={setRecipes} ingredients={ingredients} getUnitCost={getUnitCost} calcRecipeCost={calcRecipeCost} mobileMode={mobileMode} targetMargin={targetMargin} />}
+            {activeTab === 'sets' && <SetsView sets={sets} setSets={setSets} recipes={recipes} calcRecipeCost={calcRecipeCost} targetMargin={targetMargin} mobileMode={mobileMode} />}
+            {activeTab === 'projection' && <ProjectionView recipes={recipes} sets={sets} salesData={salesData} setSalesData={setSalesData} calcRecipeCost={calcRecipeCost} targetMargin={targetMargin} mobileMode={mobileMode} />}
           </div>
         </div>
       );
